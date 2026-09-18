@@ -1,0 +1,116 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  EXPERT
+  MANAGER
+  ADMIN
+}
+
+enum DemandType {
+  GOLDEN_TOKEN
+  BASE_PLAYER
+}
+
+enum Cutoff {
+  CUT_12
+  CUT_18
+}
+
+enum DemandStatus {
+  PENDING
+  APPROVED
+  COMPLETED
+  CANCELLED
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+  demands   Demand[]
+  auditLogs AuditLog[]
+}
+
+model User {
+  id             String   @id @default(cuid())
+  name           String
+  email          String   @unique
+  passwordHash   String
+  role           Role     @default(EXPERT)
+  organizationId String
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  createdDemands   Demand[]     @relation("CreatedBy")
+  approvedDemands  Demand[]     @relation("ApprovedBy")
+  completedDemands Demand[]     @relation("CompletedBy")
+  cancelledDemands Demand[]     @relation("CancelledBy")
+  auditLogs        AuditLog[]
+}
+
+model Demand {
+  id              String       @id @default(cuid())
+  organizationId  String
+  createdById     String
+  type            DemandType
+  playerId        String?
+  playerName      String
+  amountInCents   Int?
+  operationalDate DateTime     @db.Date
+  cutoff          Cutoff
+  status          DemandStatus @default(PENDING)
+  approvedById    String?
+  approvedAt      DateTime?
+  completedById   String?
+  completedAt     DateTime?
+  cancelledById   String?
+  cancelledAt     DateTime?
+  notes           String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  createdBy    User         @relation("CreatedBy", fields: [createdById], references: [id])
+  approvedBy   User?        @relation("ApprovedBy", fields: [approvedById], references: [id])
+  completedBy  User?        @relation("CompletedBy", fields: [completedById], references: [id])
+  cancelledBy  User?        @relation("CancelledBy", fields: [cancelledById], references: [id])
+
+  @@unique([organizationId, type, playerId, playerName, operationalDate, cutoff])
+  @@index([organizationId, operationalDate])
+  @@index([organizationId, status])
+  @@index([organizationId, cutoff])
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  actorId        String
+  entityType     String
+  entityId       String
+  action         String
+  beforeJson     Json?
+  afterJson      Json?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  actor        User         @relation(fields: [actorId], references: [id])
+
+  @@index([organizationId, entityId])
+  @@index([organizationId, createdAt])
+}
